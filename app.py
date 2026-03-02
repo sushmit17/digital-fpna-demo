@@ -64,11 +64,11 @@ Upload all 5 files and I will begin the consolidation.
 
 # Canonical expected filenames -> display label
 EXPECTED_FILES = {
-    "immunology_LBE_FY2026.xlsx":    "Immunology (Sales)",
-    "oncology_LBE_FY2026.xlsx":      "Oncology (Sales)",
-    "neurology_LBE_FY2026.xlsx":     "Neurology (Sales)",
-    "rd_LBE_FY2026.xlsx":            "R&D",
-    "general_admin_LBE_FY2026.xlsx": "General Admin",
+    "immunology_lbe_fy2026.xlsx":    "Immunology (Sales)",
+    "oncology_lbe_fy2026.xlsx":      "Oncology (Sales)",
+    "neurology_lbe_fy2026.xlsx":     "Neurology (Sales)",
+    "rd_lbe_fy2026.xlsx":            "R&D",
+    "general_admin_lbe_fy2026.xlsx": "General Admin",
 }
 
 
