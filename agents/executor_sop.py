@@ -29,6 +29,8 @@ def run(consolidated_data: dict, output_path: str,
     # Build a structured summary for the LLM
     lines_summary = []
     for line, vals in consolidated_data.items():
+        if not isinstance(vals, dict):
+                continue
         lbe = vals.get("LBE FY2026", 0)
         var_bgt = vals.get("Var vs Budget", 0)
         var_plbe = vals.get("Var vs Prior LBE", 0)
