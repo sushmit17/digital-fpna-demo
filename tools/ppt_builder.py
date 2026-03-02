@@ -436,6 +436,8 @@ def build_deck(data: dict, narrative: str, output_path: str,
     prs.slide_width  = SLD_W
     prs.slide_height = SLD_H
 
+    data = dict(data)  # shallow copy — do NOT mutate the caller's dict
+                   
     # Derive per-TA sales totals from unit_data for slide 3 bar chart
     if unit_data:
         for unit in unit_data:
