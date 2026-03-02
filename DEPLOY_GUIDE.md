@@ -1,6 +1,8 @@
 # Digital FP&A Manager — Demo
 ## Deploy Guide: GitHub → Render.com in 10 minutes
 
+> **⚠️ Important — Python version:** Render defaults to Python 3.14 which causes a build hang on pandas. The `.python-version` file in this repo pins it to **3.11.9** automatically. Make sure this file is included when you push to GitHub.
+
 ---
 
 ### What you'll need
@@ -121,6 +123,7 @@ Running it 100 times costs about EUR 0.20.
 
 | Problem | Fix |
 |---|---|
+| Build hangs at "Preparing metadata" | Python version issue. Ensure `.python-version` file is in your repo root containing `3.11.9` |
 | Site shows "Service unavailable" | Free tier spins down after 15 min. Wait 30 seconds and refresh. |
 | "API key invalid" error | Check the env var in Render dashboard — no spaces around the key |
 | File upload not working | Ensure files are `.xlsx` format, not `.xls` or `.csv` |

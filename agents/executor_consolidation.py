@@ -33,4 +33,5 @@ def run(file_paths: list[str], output_path: str) -> dict:
         "consolidated": consolidated,
         "output_path": output_path,
         "units_received": parsed_units,
+        "unit_data": unit_data,          # full parsed data incl. product volumes
     }

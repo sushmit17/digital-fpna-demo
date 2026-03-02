@@ -21,7 +21,7 @@ Structure: 3–4 short paragraphs covering:
 Keep total length to 180–220 words. Use EUR millions throughout."""
 
 def run(consolidated_data: dict, output_path: str,
-        unit_sales: dict = None) -> dict:
+        unit_data: list = None) -> dict:
     """
     consolidated_data: output from executor_consolidation
     Returns: {narrative: str, ppt_path: str}
@@ -64,7 +64,7 @@ Write the S&OP narrative now."""
         data=consolidated_data,
         narrative=narrative,
         output_path=output_path,
-        unit_sales=unit_sales,
+        unit_data=unit_data or [],
     )
 
     return {"narrative": narrative, "ppt_path": ppt_path}

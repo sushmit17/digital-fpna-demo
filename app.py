@@ -62,12 +62,23 @@ I am expecting:
 Upload all 5 files and I will begin the consolidation.
 """
 
+# Canonical expected filenames -> display label
+EXPECTED_FILES = {
+    "immunology_LBE_FY2026.xlsx":    "Immunology (Sales)",
+    "oncology_LBE_FY2026.xlsx":      "Oncology (Sales)",
+    "neurology_LBE_FY2026.xlsx":     "Neurology (Sales)",
+    "rd_LBE_FY2026.xlsx":            "R&D",
+    "general_admin_LBE_FY2026.xlsx": "General Admin",
+}
+
 
 @cl.on_chat_start
 async def on_start():
     cl.user_session.set("consolidated_data", None)
     cl.user_session.set("unit_sales", None)
     cl.user_session.set("awaiting_files", False)
+    cl.user_session.set("collected_files", {})   # filename -> local path
+    cl.user_session.set("tmp_dir", tempfile.mkdtemp())
     await cl.Message(content=WELCOME).send()
 
 
@@ -112,7 +123,8 @@ async def on_message(message: cl.Message):
             ).send()
             return
         await step_msg.update()
-        await run_demo2(consolidated)
+        unit_data = cl.user_session.get("unit_data", [])
+        await run_demo2(consolidated, unit_data)
 
     else:
         await cl.Message(
@@ -125,25 +137,64 @@ async def on_message(message: cl.Message):
 
 
 async def handle_file_upload(message: cl.Message):
-    """Process uploaded unit files and run Demo 1."""
+    """Accumulate uploaded files; ask for missing ones; run consolidation when all 5 present."""
+    import shutil
+
     files = message.elements
-    cl.user_session.set("awaiting_files", False)
+    tmp_dir = cl.user_session.get("tmp_dir")
+    collected = cl.user_session.get("collected_files", {})
 
-    await cl.Message(
-        content=f"📥 Received **{len(files)} file(s)**. Starting consolidation…"
-    ).send()
-
-    # Save uploaded files to temp dir
-    tmp_dir = tempfile.mkdtemp()
-    file_paths = []
+    # Save newly uploaded files, keyed by lowercase filename
+    new_names = []
+    unrecognised = []
     for f in files:
-        dest = os.path.join(tmp_dir, Path(f.name).name)
-        # Chainlit stores file at f.path
-        import shutil
-        shutil.copy(f.path, dest)
-        file_paths.append(dest)
+        fname = Path(f.name).name
+        if fname.lower() in EXPECTED_FILES:
+            dest = os.path.join(tmp_dir, fname.lower())
+            shutil.copy(f.path, dest)
+            collected[fname.lower()] = dest
+            new_names.append(EXPECTED_FILES[fname.lower()])
+        else:
+            unrecognised.append(fname)
 
-    await run_demo1(file_paths, tmp_dir)
+    cl.user_session.set("collected_files", collected)
+
+    # Report what we just received
+    received_msg = f"📥 Received: **{', '.join(new_names)}**" if new_names else ""
+    if unrecognised:
+        received_msg += (
+            f"\n⚠️ Unrecognised file(s) ignored: `{'`, `'.join(unrecognised)}`"
+            f"\n   Expected filenames: `{'`, `'.join(EXPECTED_FILES.keys())}`"
+        )
+    if received_msg:
+        await cl.Message(content=received_msg).send()
+
+    # Work out what is still missing
+    missing = {k: v for k, v in EXPECTED_FILES.items() if k not in collected}
+
+    if missing:
+        # Build a clear checklist showing what is done and what is still needed
+        lines = ["🧠 **Planner Agent** — checking submission completeness…\n"]
+        for fname, label in EXPECTED_FILES.items():
+            if fname in collected:
+                lines.append(f"  ✅ {label}")
+            else:
+                lines.append(f"  ⏳ **{label}** — still needed")
+
+        lines.append(
+            f"\n📂 Please upload the **{len(missing)} missing file(s)** listed above."
+        )
+        await cl.Message(content="\n".join(lines)).send()
+        # Stay in awaiting_files mode
+        cl.user_session.set("awaiting_files", True)
+        return
+
+    # All 5 collected — proceed
+    cl.user_session.set("awaiting_files", False)
+    await cl.Message(
+        content="✅ **All 5 unit files received.** Starting consolidation…"
+    ).send()
+    await run_demo1(list(collected.values()), tmp_dir)
 
 
 async def run_demo1(file_paths: list, tmp_dir: str):
@@ -192,8 +243,11 @@ async def run_demo1(file_paths: list, tmp_dir: str):
     ).send()
 
     # ── Step 3: Output ────────────────────────────────────────────────────────
-    # Store for Demo 2
+    # Store for Demo 2; clear file accumulator for a potential re-run
     cl.user_session.set("consolidated_data", consolidated)
+    cl.user_session.set("unit_data", result.get("unit_data", []))
+    cl.user_session.set("collected_files", {})
+    cl.user_session.set("tmp_dir", tempfile.mkdtemp())
 
     # Build a readable P&L summary for chat
     pnl_lines = [
@@ -246,7 +300,7 @@ async def run_demo1(file_paths: list, tmp_dir: str):
     ).send()
 
 
-async def run_demo2(consolidated: dict):
+async def run_demo2(consolidated: dict, unit_data: list = None):
     """Execute the S&OP deck generation workflow."""
 
     # ── Step 1: Narrative generation ─────────────────────────────────────────
@@ -264,7 +318,7 @@ async def run_demo2(consolidated: dict):
 
     try:
         result = await loop.run_in_executor(
-            None, executor_sop.run, consolidated, ppt_path, None
+            None, executor_sop.run, consolidated, ppt_path, unit_data or []
         )
     except Exception as e:
         await cl.Message(content=f"❌ S&OP generation error: {e}").send()
@@ -308,12 +362,13 @@ async def run_demo2(consolidated: dict):
 
     await cl.Message(
         content=(
-            "**Deck contains 5 slides:**\n"
+            "**Deck contains 6 slides:**\n"
             "- Slide 1: Executive Summary & KPIs\n"
-            "- Slide 2: Sales Forecast by Therapeutic Area\n"
-            "- Slide 3: P&L vs Prior LBE\n"
-            "- Slide 4: P&L vs Budget\n"
-            "- Slide 5: P&L vs Prior Year\n\n"
+            "- Slide 2: Product Volume by Therapeutic Area\n"
+            "- Slide 3: Sales Forecast by Therapeutic Area\n"
+            "- Slide 4: P&L vs Prior LBE\n"
+            "- Slide 5: P&L vs Budget\n"
+            "- Slide 6: P&L vs Prior Year\n\n"
             "*Demo complete. You may restart the conversation to run again.*"
         )
     ).send()

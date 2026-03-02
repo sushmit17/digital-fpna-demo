@@ -204,6 +204,117 @@ def build_slide1_summary(prs, data, narrative):
                 font_size=10.5, color=DARK, wrap=True)
 
 
+
+def build_slide2_volumes(prs, unit_data: list):
+    """
+    Slide 2 (new): Product Volume by Therapeutic Area.
+    Shows LBE vs Budget vs Prior Year volumes (000 units) for every product,
+    grouped by TA, in a clean grouped table layout.
+    unit_data: list of parsed unit dicts (with 'products' key for Sales units)
+    """
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide_header(slide, "Product Volume by Therapeutic Area",
+                 "LBE FY2026 vs Budget & Prior Year  —  Volumes in 000 units  (shown as 000s)")
+
+    # Filter to Sales units that have products
+    sales_units = [u for u in unit_data if u.get("products")]
+    if not sales_units:
+        add_textbox(slide, "No product volume data available.",
+                    0.5, 2.0, 12, 1.0, font_size=14, color=DGREY)
+        return
+
+    # ── Layout: one column per TA, table inside each ──────────────────────────
+    n_units = len(sales_units)
+    col_w   = (13.33 - 0.4) / n_units        # width of each TA block
+    left    = 0.2
+    top     = 1.25
+    hdr_h   = 0.38
+    row_h   = 0.36
+    ta_colors = [BLUE, TEAL, RGBColor(0x8B, 0x5C, 0xF6)]
+
+    for ui, unit in enumerate(sales_units):
+        xl = left + ui * col_w
+        block_w = col_w - 0.15
+        ta_color = ta_colors[ui % len(ta_colors)]
+
+        # TA header band
+        add_rect(slide, xl, top, block_w, hdr_h + 0.04, ta_color)
+        add_textbox(slide, unit["unit"].upper(),
+                    xl + 0.08, top + 0.05, block_w - 0.16, hdr_h - 0.1,
+                    font_size=11, bold=True, color=WHITE)
+
+        # Sub-header row: Product | LBE | Budget | PY | vs Bgt
+        sub_top = top + hdr_h + 0.04
+        sub_cols_w = [block_w * f for f in [0.35, 0.14, 0.14, 0.14, 0.23]]
+        sub_hdrs   = ["Product", "LBE", "Bgt", "PY", "vs Bgt"]
+        x = xl
+        for sci, (sh, sw) in enumerate(zip(sub_hdrs, sub_cols_w)):
+            add_rect(slide, x, sub_top, sw - 0.02, 0.3,
+                     RGBColor(0xEE, 0xF2, 0xF8))
+            add_textbox(slide, sh, x + 0.02, sub_top + 0.03,
+                        sw - 0.04, 0.24,
+                        font_size=8, bold=True, color=NAVY,
+                        align=PP_ALIGN.LEFT if sci == 0 else PP_ALIGN.CENTER)
+            x += sw
+
+        # Data rows
+        for ri, prod in enumerate(unit["products"]):
+            ry = sub_top + 0.3 + ri * row_h
+            row_fill = RGBColor(0xF8, 0xF9, 0xFB) if ri % 2 == 0 else WHITE
+            lbe_v = prod.get("lbe_vol", 0)
+            bgt_v = prod.get("bgt_vol", 0)
+            py_v  = prod.get("py_vol", 0)
+            var_v = round(lbe_v - bgt_v, 0)
+
+            # Truncate product name if too long
+            short_name = prod["name"]
+            if "(" in short_name:
+                short_name = short_name[:short_name.index("(")].strip()
+
+            x = xl
+            def fv(n, sign=False):
+                # Format as thousands with one decimal: 42800 -> "42.8"
+                s = f"{abs(n)/1000:.1f}"
+                if sign: return ("+" if n >= 0 else "") + f"{n/1000:.1f}"
+                return s
+            vals = [short_name, fv(lbe_v), fv(bgt_v), fv(py_v), fv(var_v, sign=True)]
+            for ci, (val, sw) in enumerate(zip(vals, sub_cols_w)):
+                add_rect(slide, x, ry, sw - 0.02, row_h - 0.02, row_fill)
+                is_var = ci == 4
+                if is_var:
+                    clr = GREEN if var_v >= 0 else RED
+                else:
+                    clr = NAVY if ci == 0 else DARK
+                add_textbox(slide, val,
+                            x + 0.02, ry + 0.04, sw - 0.06, row_h - 0.08,
+                            font_size=9, bold=(ci == 0), color=clr,
+                            align=PP_ALIGN.LEFT if ci == 0 else PP_ALIGN.CENTER)
+                x += sw
+
+        # Total row
+        total_row = sub_top + 0.3 + len(unit["products"]) * row_h
+        t_lbe = sum(p.get("lbe_vol", 0) for p in unit["products"])
+        t_bgt = sum(p.get("bgt_vol", 0) for p in unit["products"])
+        t_py  = sum(p.get("py_vol",  0) for p in unit["products"])
+        t_var = round(t_lbe - t_bgt, 0)
+
+        x = xl
+        def fv2(n, sign=False):
+            if sign: return ("+" if n >= 0 else "") + f"{n/1000:.1f}"
+            return f"{abs(n)/1000:.1f}"
+        tot_vals = ["Total", fv2(t_lbe), fv2(t_bgt), fv2(t_py), fv2(t_var, sign=True)]
+        for ci, (val, sw) in enumerate(zip(tot_vals, sub_cols_w)):
+            add_rect(slide, x, total_row, sw - 0.02, row_h - 0.02,
+                     RGBColor(0xEE, 0xF2, 0xF8))
+            is_var = ci == 4
+            clr = (GREEN if t_var >= 0 else RED) if is_var else NAVY
+            add_textbox(slide, val,
+                        x + 0.02, total_row + 0.04, sw - 0.06, row_h - 0.08,
+                        font_size=9, bold=True, color=clr,
+                        align=PP_ALIGN.LEFT if ci == 0 else PP_ALIGN.CENTER)
+            x += sw
+
+
 def build_slide2_sales(prs, data):
     """Slide 2: Sales Forecast by Therapeutic Area."""
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -315,22 +426,26 @@ def build_slide5_vs_py(prs, data):
 
 
 def build_deck(data: dict, narrative: str, output_path: str,
-               unit_sales: dict = None):
+               unit_data: list = None):
     """
     data: consolidated P&L dict from consolidator
     narrative: string from LLM
-    unit_sales: optional dict with per-TA sales for slide 2
+    unit_data: list of parsed unit dicts (with product volumes) from executor_consolidation
     """
     prs = Presentation()
     prs.slide_width  = SLD_W
     prs.slide_height = SLD_H
 
-    # Inject TA-level sales into data for slide 2
-    if unit_sales:
-        for k, v in unit_sales.items():
-            data[k] = v
+    # Derive per-TA sales totals from unit_data for slide 3 bar chart
+    if unit_data:
+        for unit in unit_data:
+            key = unit["unit"].lower().replace(" ", "_")
+            ns = unit["lines"].get("Net Sales", {})
+            data[f"_{key}_sales"]  = ns.get("lbe", 0)
+            data[f"_{key}_budget"] = ns.get("budget", 0)
 
     build_slide1_summary(prs, data, narrative)
+    build_slide2_volumes(prs, unit_data or [])
     build_slide2_sales(prs, data)
     build_slide3_vs_prior_lbe(prs, data)
     build_slide4_vs_budget(prs, data)
